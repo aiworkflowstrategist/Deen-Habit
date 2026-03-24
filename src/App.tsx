@@ -406,6 +406,63 @@ export default function App() {
 
   const handleSignOut = async () => { await signOut(); setShowUserMenu(false); setSyncStatus("idle"); };
 
+  // ── Pull to refresh ──
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pullStartY = useRef<number | null>(null);
+  const pullThreshold = 80;
+
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    if (window.scrollY > 0) return;
+    pullStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchMove = useCallback((e: TouchEvent) => {
+    if (pullStartY.current === null || window.scrollY > 0) return;
+    const currentY = e.touches[0].clientY;
+    const distance = Math.max(0, currentY - pullStartY.current);
+    if (distance > 0) {
+      e.preventDefault();
+      setPullDistance(Math.min(distance * 0.5, pullThreshold));
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullDistance >= pullThreshold && !isRefreshing) {
+      setIsRefreshing(true);
+      try {
+        // Check for service worker updates
+        if (swRegRef.current) {
+          await swRegRef.current.update();
+        }
+        // Force refresh prayer times if needed
+        if (mode === "ramadan" && location) {
+          loadPrayerTimes(location);
+        }
+        // Small delay for visual feedback
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.warn("Pull refresh failed:", error);
+      } finally {
+        setIsRefreshing(false);
+      }
+    }
+    setPullDistance(0);
+    pullStartY.current = null;
+  }, [pullDistance, isRefreshing, mode, location, loadPrayerTimes]);
+
+  useEffect(() => {
+    document.addEventListener("touchstart", handleTouchStart, { passive: false });
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchend", handleTouchEnd);
+
+    return () => {
+      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+
   // ── Score ──
   const todayScore = (() => {
     let score = 0, total = 14;
@@ -429,6 +486,30 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0a0f0d] text-white" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+
+      {/* ── Pull to Refresh Indicator ── */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div className="fixed top-0 left-0 right-0 z-40 flex flex-col items-center justify-center bg-[#0a0f0d] border-b border-white/10"
+          style={{
+            transform: `translateY(${Math.max(0, pullDistance - 60)}px)`,
+            paddingTop: "env(safe-area-inset-top)",
+            paddingBottom: "1rem"
+          }}>
+          <div className={`w-8 h-8 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 flex items-center justify-center transition-transform ${isRefreshing ? "animate-spin" : ""}`}
+            style={{ transform: `rotate(${Math.min(pullDistance / pullThreshold * 360, 360)}deg)` }}>
+            {!isRefreshing && <span className="text-emerald-400 text-sm">↓</span>}
+          </div>
+          <p className="text-xs text-emerald-400 mt-2 font-medium">
+            {isRefreshing ? "Updating..." : pullDistance >= pullThreshold ? "Release to update" : "Pull to update"}
+          </p>
+        </div>
+      )}
+
+      {/* ── Main Content ── */}
+      <div style={{
+        transform: `translateY(${pullDistance > 0 ? pullDistance : 0}px)`,
+        transition: pullDistance === 0 && !isRefreshing ? "transform 0.3s ease-out" : "none"
+      }}>
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-10 backdrop-blur-xl border-b border-white/10 bg-[#0a0f0d]/80"
@@ -767,6 +848,7 @@ export default function App() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
