@@ -40,7 +40,7 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
   const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem(FONT_KEY) ?? "1"));
   const [toast, setToast] = useState<string | null>(null);
   const [surahSearch, setSurahSearch] = useState("");
-  const [overlayTab, setOverlayTab] = useState<"surahs" | "juz">("surahs");
+  const [overlayTab, setOverlayTab] = useState<"surahs" | "page" | "juz" | "hizb">("surahs");
   const contentRef = useRef<HTMLDivElement>(null);
 
   const surah = getSurahForPage(page);
@@ -159,6 +159,26 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
       String(s.number).includes(surahSearch)
   );
 
+  function getJuzStartInfo(juzNum: number) {
+    const startPage = JUZ_PAGES[juzNum - 1];
+    const surahInfo = getSurahForPage(startPage);
+    const isSurahStart = startPage === surahInfo.startPage;
+    const verse = isSurahStart ? 1 : 1;
+    return { startPage, surahInfo, verse };
+  }
+
+  const hizbList = Array.from({ length: 60 }, (_, i) => {
+    const juzIndex = Math.floor(i / 2);
+    const isFirstHalf = i % 2 === 0;
+    const page = isFirstHalf
+      ? JUZ_PAGES[juzIndex]
+      : juzIndex < JUZ_PAGES.length - 1
+        ? Math.floor((JUZ_PAGES[juzIndex] + JUZ_PAGES[juzIndex + 1]) / 2)
+        : JUZ_PAGES[JUZ_PAGES.length - 1];
+    const surahInfo = getSurahForPage(page);
+    return { number: i + 1, startPage: page, surahInfo };
+  });
+
   return (
     <div className="flex flex-col h-full relative">
 
@@ -196,14 +216,21 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
             <div className="flex gap-1">
               <button onClick={() => setOverlayTab("surahs")}
                 className={`px-3 py-1 rounded-lg text-sm font-bold transition-colors ${overlayTab === "surahs" ? "bg-emerald-500/20 text-emerald-400" : "text-white/60 hover:text-white/80"
-                  }`}>Surahs</button>
+                  }`}>Surah</button>
+              <button onClick={() => setOverlayTab("page")}
+                className={`px-3 py-1 rounded-lg text-sm font-bold transition-colors ${overlayTab === "page" ? "bg-emerald-500/20 text-emerald-400" : "text-white/60 hover:text-white/80"
+                  }`}>Page</button>
               <button onClick={() => setOverlayTab("juz")}
                 className={`px-3 py-1 rounded-lg text-sm font-bold transition-colors ${overlayTab === "juz" ? "bg-emerald-500/20 text-emerald-400" : "text-white/60 hover:text-white/80"
                   }`}>Juz</button>
+              <button onClick={() => setOverlayTab("hizb")}
+                className={`px-3 py-1 rounded-lg text-sm font-bold transition-colors ${overlayTab === "hizb" ? "bg-emerald-500/20 text-emerald-400" : "text-white/60 hover:text-white/80"
+                  }`}>Hizb</button>
             </div>
             <button onClick={() => { setView("reader"); setSurahSearch(""); setOverlayTab("surahs"); }}
               className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-lg">×</button>
           </div>
+
           {overlayTab === "surahs" && (
             <>
               <div className="px-3 py-2">
@@ -229,21 +256,54 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
               </div>
             </>
           )}
+          {overlayTab === "page" && (
+            <div className="flex flex-col gap-3 px-3 py-4">
+              <div className="flex gap-2">
+                <input type="number" min={1} max={604} value={jumpInput}
+                  onChange={(e) => setJumpInput(e.target.value)}
+                  className={`flex-1 px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? "bg-white/5 border-white/10" : "bg-black/5 border-black/10"}`}
+                  placeholder="Page number (1-604)" />
+                <button onClick={() => { const p = Number(jumpInput); if (p >= 1 && p <= 604) { goTo(p); setJumpInput(""); } }}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold">Go</button>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-xs">
+                {[1, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220].map((p) => (
+                  <button key={p} onClick={() => goTo(p)}
+                    className="rounded-lg bg-white/10 hover:bg-white/20 py-2">p.{p}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {overlayTab === "juz" && (
-            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-2">
               {Array.from({ length: 30 }, (_, i) => i + 1).map((juzNum) => {
-                const startPage = JUZ_PAGES[juzNum - 1];
+                const { startPage, surahInfo, verse } = getJuzStartInfo(juzNum);
                 const isCurrent = juz === juzNum;
                 return (
                   <button key={juzNum} onClick={() => goTo(startPage)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-white/5 ${isCurrent ? "bg-emerald-500/15 border border-emerald-500/25" : ""
-                      }`}>
-                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isCurrent ? "bg-emerald-500 text-white" : "bg-white/10"
-                      }`}>{juzNum}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Juz {juzNum}</p>
-                      <p className="text-xs opacity-40">Starts at page {startPage}</p>
+                    className={`w-full rounded-2xl p-3 text-left transition-colors ${isCurrent ? "bg-emerald-500/15 border border-emerald-500/25" : "bg-white/5 hover:bg-white/10"}`}>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold">Juz {juzNum}</h3>
+                      <span className="text-xs opacity-50">p.{startPage}</span>
                     </div>
+                    <p className="text-sm opacity-60">{surahInfo.name} {surahInfo.number}:{verse}</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {overlayTab === "hizb" && (
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-2">
+              {hizbList.map((h) => {
+                const isCurrent = Math.floor((juz - 1) * 2) + 1 === h.number || Math.floor((juz - 1) * 2) + 2 === h.number;
+                return (
+                  <button key={h.number} onClick={() => goTo(h.startPage)}
+                    className={`w-full rounded-2xl p-3 text-left transition-colors ${isCurrent ? "bg-emerald-500/15 border border-emerald-500/25" : "bg-white/5 hover:bg-white/10"}`}>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold">Hizb {h.number}</h3>
+                      <span className="text-xs opacity-50">p.{h.startPage}</span>
+                    </div>
+                    <p className="text-sm opacity-60">{h.surahInfo.name}</p>
                   </button>
                 );
               })}
