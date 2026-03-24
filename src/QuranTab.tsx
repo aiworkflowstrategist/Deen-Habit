@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { SURAHS, getSurahForPage, getJuzForPage } from "./quranData";
+import { SURAHS, getSurahForPage, getJuzForPage, JUZ_PAGES } from "./quranData";
 import type { UserProfile, DayData } from "./types";
 
 interface AyahData {
@@ -40,6 +40,7 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
   const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem(FONT_KEY) ?? "1"));
   const [toast, setToast] = useState<string | null>(null);
   const [surahSearch, setSurahSearch] = useState("");
+  const [overlayTab, setOverlayTab] = useState<"surahs" | "juz">("surahs");
   const contentRef = useRef<HTMLDivElement>(null);
 
   const surah = getSurahForPage(page);
@@ -187,36 +188,67 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
         </div>
       </div>
 
-      {/* ── Surah list overlay ── */}
+      {/* ── Surah/Juz list overlay ── */}
       {view === "surahs" && (
         <div className={`absolute inset-0 z-20 flex flex-col rounded-2xl border overflow-hidden ${isDark ? "bg-[#0a0f0d] border-white/10" : "bg-[#f0f7f4] border-black/10"
           }`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-            <h3 className="font-bold text-base">Surahs</h3>
-            <button onClick={() => { setView("reader"); setSurahSearch(""); }}
+            <div className="flex gap-1">
+              <button onClick={() => setOverlayTab("surahs")}
+                className={`px-3 py-1 rounded-lg text-sm font-bold transition-colors ${overlayTab === "surahs" ? "bg-emerald-500/20 text-emerald-400" : "text-white/60 hover:text-white/80"
+                  }`}>Surahs</button>
+              <button onClick={() => setOverlayTab("juz")}
+                className={`px-3 py-1 rounded-lg text-sm font-bold transition-colors ${overlayTab === "juz" ? "bg-emerald-500/20 text-emerald-400" : "text-white/60 hover:text-white/80"
+                  }`}>Juz</button>
+            </div>
+            <button onClick={() => { setView("reader"); setSurahSearch(""); setOverlayTab("surahs"); }}
               className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-lg">×</button>
           </div>
-          <div className="px-3 py-2">
-            <input value={surahSearch} onChange={(e) => setSurahSearch(e.target.value)}
-              placeholder="Search surah…"
-              className={`w-full px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? "bg-white/5 border-white/10 placeholder-white/30" : "bg-black/5 border-black/10 placeholder-black/30"
-                }`} />
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
-            {filteredSurahs.map((s) => (
-              <button key={s.number} onClick={() => { goTo(s.startPage); setSurahSearch(""); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-white/5 ${surah.number === s.number ? "bg-emerald-500/15 border border-emerald-500/25" : ""
-                  }`}>
-                <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${surah.number === s.number ? "bg-emerald-500 text-white" : "bg-white/10"
-                  }`}>{s.number}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{s.name}</p>
-                  <p className="text-xs opacity-40">{s.type} · {s.ayahs} ayahs · p.{s.startPage}</p>
-                </div>
-                <p className="text-base font-arabic flex-shrink-0 opacity-80">{s.arabicName}</p>
-              </button>
-            ))}
-          </div>
+          {overlayTab === "surahs" && (
+            <>
+              <div className="px-3 py-2">
+                <input value={surahSearch} onChange={(e) => setSurahSearch(e.target.value)}
+                  placeholder="Search surah…"
+                  className={`w-full px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? "bg-white/5 border-white/10 placeholder-white/30" : "bg-black/5 border-black/10 placeholder-black/30"
+                    }`} />
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
+                {filteredSurahs.map((s) => (
+                  <button key={s.number} onClick={() => { goTo(s.startPage); setSurahSearch(""); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-white/5 ${surah.number === s.number ? "bg-emerald-500/15 border border-emerald-500/25" : ""
+                      }`}>
+                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${surah.number === s.number ? "bg-emerald-500 text-white" : "bg-white/10"
+                      }`}>{s.number}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{s.name}</p>
+                      <p className="text-xs opacity-40">{s.type} · {s.ayahs} ayahs · p.{s.startPage}</p>
+                    </div>
+                    <p className="text-base font-arabic flex-shrink-0 opacity-80">{s.arabicName}</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {overlayTab === "juz" && (
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+              {Array.from({ length: 30 }, (_, i) => i + 1).map((juzNum) => {
+                const startPage = JUZ_PAGES[juzNum - 1];
+                const isCurrent = juz === juzNum;
+                return (
+                  <button key={juzNum} onClick={() => goTo(startPage)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-white/5 ${isCurrent ? "bg-emerald-500/15 border border-emerald-500/25" : ""
+                      }`}>
+                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isCurrent ? "bg-emerald-500 text-white" : "bg-white/10"
+                      }`}>{juzNum}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Juz {juzNum}</p>
+                      <p className="text-xs opacity-40">Starts at page {startPage}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
