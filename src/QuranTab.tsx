@@ -127,6 +127,9 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
     } else {
       showToast(`Page ${page} marked ✓ — ${todayPages + 1}/${goal} today`);
     }
+    if (page < 604) {
+      goTo(page + 1);
+    }
   }
 
   function toggleBookmark() {
@@ -323,7 +326,7 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
         </button>
         <button onClick={markRead}
           className="flex-[2] py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition-colors">
-          ✓ Mark Page {page} Read
+          ✓ Mark Page {page} Read & Next
         </button>
         <button onClick={() => goTo(page + 1)} disabled={page >= 604}
           className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-30 font-semibold text-sm transition-colors">
