@@ -24,6 +24,7 @@ export interface UserProfile {
   quranLastPage: number;
   quranBookmarks: number[];
   showTransliteration: boolean;
+  duaFavourites: string[];
   joinedAt: string;
 }
 

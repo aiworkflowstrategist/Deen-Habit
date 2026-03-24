@@ -35,7 +35,7 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
       list = list.filter((d) =>
         d.title.toLowerCase().includes(q) ||
         d.translation.toLowerCase().includes(q) ||
-        d.whenToRecite.toLowerCase().includes(q)
+        d.when.toLowerCase().includes(q)
       );
     }
     return list;
@@ -60,7 +60,7 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
         >
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold">{dua.title}</p>
-            <p className="text-xs opacity-50 mt-0.5 line-clamp-1">{dua.whenToRecite}</p>
+            <p className="text-xs opacity-50 mt-0.5 line-clamp-1">{dua.when}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <span className={`text-xs transition-transform ${isExpanded ? "rotate-180" : ""}`}>▾</span>
@@ -90,7 +90,7 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
             {/* When to recite */}
             <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/15 p-3">
               <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">When to recite</p>
-              <p className="text-xs opacity-70 leading-relaxed">{dua.whenToRecite}</p>
+              <p className="text-xs opacity-70 leading-relaxed">{dua.when}</p>
             </div>
 
             {/* Footer */}
@@ -98,11 +98,10 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
               <span className="text-[11px] opacity-40">📖 {dua.source}</span>
               <button
                 onClick={() => toggleFavourite(dua.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  isFav
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${isFav
                     ? "bg-amber-500/20 border border-amber-500/30 text-amber-400"
                     : "bg-white/10 hover:bg-white/15"
-                }`}
+                  }`}
               >
                 {isFav ? "★ Saved" : "☆ Save"}
               </button>
@@ -133,11 +132,10 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
         </div>
         <button
           onClick={toggleTranslit}
-          className={`px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex-shrink-0 ${
-            showTranslit
+          className={`px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex-shrink-0 ${showTranslit
               ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
               : surface + " opacity-60"
-          }`}
+            }`}
         >
           A-B-C
         </button>
@@ -147,11 +145,10 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         <button
           onClick={() => setActiveCategory(null)}
-          className={`flex-shrink-0 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
-            !activeCategory
+          className={`flex-shrink-0 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${!activeCategory
               ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
               : surface + " opacity-60"
-          }`}
+            }`}
         >
           All
         </button>
@@ -159,11 +156,10 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
           <button
             key={cat.id}
             onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
-              activeCategory === cat.id
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${activeCategory === cat.id
                 ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
                 : surface + " opacity-60"
-            }`}
+              }`}
           >
             <span>{cat.icon}</span>
             <span>{cat.label}</span>

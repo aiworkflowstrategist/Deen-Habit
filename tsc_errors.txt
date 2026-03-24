@@ -1,0 +1,13 @@
+
+> deenhabit@2.0.0 lint
+> tsc --noEmit
+
+src/App.tsx(627,13): error TS2322: Type '{ profile: UserProfile; onProfileChange: (p: UserProfile) => void; todayPages: number; onMarkPage: () => void; isDark: true; }' is not assignable to type 'IntrinsicAttributes & QuranTabProps'.
+  Property 'todayPages' does not exist on type 'IntrinsicAttributes & QuranTabProps'.
+src/DuaTab.tsx(17,30): error TS2339: Property 'duaFavourites' does not exist on type 'UserProfile'.
+src/DuaTab.tsx(21,28): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/DuaTab.tsx(23,35): error TS2353: Object literal may only specify known properties, and 'duaFavourites' does not exist in type 'UserProfile'.
+src/DuaTab.tsx(38,11): error TS2339: Property 'whenToRecite' does not exist on type 'Dua'.
+src/DuaTab.tsx(63,72): error TS2339: Property 'whenToRecite' does not exist on type 'Dua'.
+src/DuaTab.tsx(93,70): error TS2339: Property 'whenToRecite' does not exist on type 'Dua'.
+src/ProfileTab.tsx(31,31): error TS2353: Object literal may only specify known properties, and 'duaFavourites' does not exist in type 'UserProfile'.
