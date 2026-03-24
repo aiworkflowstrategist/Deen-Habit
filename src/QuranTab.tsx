@@ -30,15 +30,16 @@ async function fetchPage(page: number): Promise<AyahData[]> {
 
 export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage, isDark }: QuranTabProps) {
   const [page, setPage] = useState(profile.quranLastPage || 1);
-  const [ayahs, setAyahs] = useState<AyahData[]>([]);
+  const [pagesLoaded, setPagesLoaded] = useState<{ page: number; ayahs: AyahData[] }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingNext, setLoadingNext] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [view, setView] = useState<"reader" | "surahs" | "jump">("reader");
   const [jumpInput, setJumpInput] = useState("");
   const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem(FONT_KEY) ?? "1"));
   const [toast, setToast] = useState<string | null>(null);
   const [surahSearch, setSurahSearch] = useState("");
-  const touchStartX = useRef<number | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const surah = getSurahForPage(page);
@@ -46,32 +47,80 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
   const todayPages = dayData.quranPages;
   const goal = profile.quranGoal;
 
-  const load = useCallback(async (p: number) => {
-    setLoading(true);
+  const load = useCallback(async (p: number, append = false) => {
+    if (append) setLoadingNext(true); else setLoading(true);
     setError(null);
     try {
       const data = await fetchPage(p);
-      setAyahs(data);
-      if (contentRef.current) contentRef.current.scrollTop = 0;
+      if (append) {
+        setPagesLoaded((prev) => {
+          if (prev.some(pd => pd.page === p)) return prev;
+          return [...prev, { page: p, ayahs: data }];
+        });
+      } else {
+        setPagesLoaded([{ page: p, ayahs: data }]);
+        setPage(p);
+        if (contentRef.current) contentRef.current.scrollTop = 0;
+      }
     } catch {
       setError("Could not load page. Check your connection.");
     } finally {
-      setLoading(false);
+      if (append) setLoadingNext(false); else setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(page); }, [page, load]);
+  // Initial setup: Load starting page
+  useEffect(() => {
+    load(profile.quranLastPage || 1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounce profile updates to avoid constant re-renders when scrolling
+  useEffect(() => {
+    if (page !== profile.quranLastPage) {
+      const tid = setTimeout(() => {
+        onProfileChange({ ...profile, quranLastPage: page });
+      }, 500);
+      return () => clearTimeout(tid);
+    }
+  }, [page, profile, onProfileChange]);
+
+  // Observer to active page tracking
+  useEffect(() => {
+    if (!contentRef.current || pagesLoaded.length === 0) return;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const p = Number(e.target.getAttribute("data-page"));
+          if (p && p !== page) setPage(p);
+        }
+      });
+    }, { root: contentRef.current, threshold: 0.2 });
+
+    const els = contentRef.current.querySelectorAll(".quran-page-marker");
+    els.forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [pagesLoaded, page]);
+
+  // Handle endless scrolling downwards
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 800 && !loading && !loadingNext && !error) {
+      const last = pagesLoaded[pagesLoaded.length - 1];
+      if (last && last.page < 604) {
+        load(last.page + 1, true);
+      }
+    }
+  }, [loading, loadingNext, error, pagesLoaded, load]);
 
   function goTo(p: number) {
     const clamped = Math.max(1, Math.min(604, p));
-    setPage(clamped);
-    onProfileChange({ ...profile, quranLastPage: clamped });
+    load(clamped, false); // Reload completely from new page
+    setView("reader");
   }
 
   function markRead() {
     onMarkPage();
-    const next = Math.min(604, page + 1);
-    goTo(next);
     const remaining = goal - (todayPages + 1);
     if (remaining <= 0) {
       showToast("🎉 Daily goal reached! الحمد لله");
@@ -99,25 +148,12 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
     localStorage.setItem(FONT_KEY, String(next));
   }
 
-  // Touch swipe to change pages
-  function onTouchStart(e: React.TouchEvent) {
-    touchStartX.current = e.touches[0].clientX;
-  }
-  function onTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return;
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 60) { diff > 0 ? goTo(page + 1) : goTo(page - 1); }
-    touchStartX.current = null;
-  }
-
   const isBookmarked = (profile.quranBookmarks ?? []).includes(page);
   const filteredSurahs = SURAHS.filter(
     (s) => s.name.toLowerCase().includes(surahSearch.toLowerCase()) ||
-           s.arabicName.includes(surahSearch) ||
-           String(s.number).includes(surahSearch)
+      s.arabicName.includes(surahSearch) ||
+      String(s.number).includes(surahSearch)
   );
-
-  const card = `rounded-2xl border ${isDark ? "bg-white/5 border-white/10" : "bg-black/5 border-black/10"}`;
 
   return (
     <div className="flex flex-col h-full relative">
@@ -130,19 +166,17 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
         </div>
 
         {/* Progress pill */}
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${
-          todayPages >= goal
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${todayPages >= goal
             ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
             : "bg-white/5 border-white/10 opacity-70"
-        }`}>
+          }`}>
           📖 {todayPages}/{goal}
         </div>
 
         <div className="flex gap-1.5">
           <button onClick={() => setView(view === "surahs" ? "reader" : "surahs")}
-            className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-colors ${
-              view === "surahs" ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 hover:bg-white/15"
-            }`}>☰</button>
+            className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-colors ${view === "surahs" ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 hover:bg-white/15"
+              }`}>☰</button>
           <button onClick={cycleFont}
             className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/15 flex items-center justify-center text-xs font-bold transition-colors">
             {FONT_LABELS[fontSize]}
@@ -152,9 +186,8 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
 
       {/* ── Surah list overlay ── */}
       {view === "surahs" && (
-        <div className={`absolute inset-0 z-20 flex flex-col rounded-2xl border overflow-hidden ${
-          isDark ? "bg-[#0a0f0d] border-white/10" : "bg-[#f0f7f4] border-black/10"
-        }`}>
+        <div className={`absolute inset-0 z-20 flex flex-col rounded-2xl border overflow-hidden ${isDark ? "bg-[#0a0f0d] border-white/10" : "bg-[#f0f7f4] border-black/10"
+          }`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <h3 className="font-bold text-base">Surahs</h3>
             <button onClick={() => { setView("reader"); setSurahSearch(""); }}
@@ -163,19 +196,16 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
           <div className="px-3 py-2">
             <input value={surahSearch} onChange={(e) => setSurahSearch(e.target.value)}
               placeholder="Search surah…"
-              className={`w-full px-3 py-2 rounded-xl border text-sm outline-none ${
-                isDark ? "bg-white/5 border-white/10 placeholder-white/30" : "bg-black/5 border-black/10 placeholder-black/30"
-              }`} />
+              className={`w-full px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? "bg-white/5 border-white/10 placeholder-white/30" : "bg-black/5 border-black/10 placeholder-black/30"
+                }`} />
           </div>
           <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
             {filteredSurahs.map((s) => (
-              <button key={s.number} onClick={() => { goTo(s.startPage); setView("reader"); setSurahSearch(""); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-white/5 ${
-                  surah.number === s.number ? "bg-emerald-500/15 border border-emerald-500/25" : ""
-                }`}>
-                <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                  surah.number === s.number ? "bg-emerald-500 text-white" : "bg-white/10"
-                }`}>{s.number}</span>
+              <button key={s.number} onClick={() => { goTo(s.startPage); setSurahSearch(""); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-white/5 ${surah.number === s.number ? "bg-emerald-500/15 border border-emerald-500/25" : ""
+                  }`}>
+                <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${surah.number === s.number ? "bg-emerald-500 text-white" : "bg-white/10"
+                  }`}>{s.number}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{s.name}</p>
                   <p className="text-xs opacity-40">{s.type} · {s.ayahs} ayahs · p.{s.startPage}</p>
@@ -189,13 +219,12 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
 
       {/* ── Page reader ── */}
       <div ref={contentRef}
-        className={`flex-1 overflow-y-auto rounded-2xl border mb-3 ${
-          isDark ? "bg-white/[0.03] border-white/10" : "bg-black/[0.02] border-black/10"
-        }`}
-        onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        className={`flex-1 overflow-y-auto rounded-2xl border mb-3 scroll-smooth ${isDark ? "bg-white/[0.03] border-white/10" : "bg-black/[0.02] border-black/10"
+          }`}
+        onScroll={handleScroll}>
 
         {/* Page number header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-white/[0.06] backdrop-blur-md bg-[#0a0f0d]/90">
           <span className="text-xs opacity-40 font-mono">Page {page} of 604</span>
           <button onClick={toggleBookmark} className={`text-lg transition-colors ${isBookmarked ? "text-amber-400" : "opacity-30 hover:opacity-60"}`}>
             {isBookmarked ? "🔖" : "🔖"}
@@ -209,55 +238,79 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
           <div className="flex gap-2 px-4 py-3 border-b border-white/[0.06]">
             <input type="number" min="1" max="604" value={jumpInput}
               onChange={(e) => setJumpInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { goTo(parseInt(jumpInput)); setView("reader"); setJumpInput(""); } }}
+              onKeyDown={(e) => { if (e.key === "Enter") { goTo(parseInt(jumpInput)); setJumpInput(""); } }}
               placeholder="Enter page (1-604)"
-              className={`flex-1 px-3 py-2 rounded-xl border text-sm outline-none ${
-                isDark ? "bg-white/5 border-white/15 placeholder-white/25" : "bg-black/5 border-black/10"
-              }`} autoFocus />
-            <button onClick={() => { goTo(parseInt(jumpInput)); setView("reader"); setJumpInput(""); }}
+              className={`flex-1 px-3 py-2 rounded-xl border text-sm outline-none ${isDark ? "bg-white/5 border-white/15 placeholder-white/25" : "bg-black/5 border-black/10"
+                }`} autoFocus />
+            <button onClick={() => { goTo(parseInt(jumpInput)); setJumpInput(""); }}
               className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold">Go</button>
           </div>
         )}
 
-        {/* Surah header if page starts a new surah */}
-        {ayahs.length > 0 && ayahs[0].numberInSurah === 1 && (
-          <div className="text-center py-5 border-b border-white/[0.06]">
-            <p className="text-2xl font-arabic mb-1">{surah.arabicName}</p>
-            <p className="text-sm opacity-50">{surah.name} · {surah.type} · {surah.ayahs} Ayahs</p>
-            {surah.number !== 1 && surah.number !== 9 && (
-              <p className="text-lg font-arabic mt-3 opacity-70">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>
-            )}
-          </div>
-        )}
-
-        {/* Ayahs */}
-        <div className="px-4 py-4">
-          {loading && (
+        {/* Endless Pages Container */}
+        <div className="px-4 py-4 space-y-12">
+          {(!pagesLoaded.length && loading) && (
             <div className="flex items-center justify-center py-16">
               <div className="w-8 h-8 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
             </div>
           )}
-          {error && (
+
+          {(!pagesLoaded.length && error) && (
             <div className="text-center py-12 space-y-3">
               <p className="text-2xl">📡</p>
               <p className="text-sm opacity-60">{error}</p>
-              <button onClick={() => load(page)} className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 text-sm">Retry</button>
+              <button onClick={() => load(profile.quranLastPage || 1, false)} className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 text-sm">Retry</button>
             </div>
           )}
-          {!loading && !error && (
-            <p className={`font-arabic text-right leading-loose tracking-wide text-${FONT_SIZES[fontSize].split("-")[1]} ${
-              FONT_SIZES[fontSize]
-            } ${isDark ? "text-white/90" : "text-black/90"}`}
-              style={{ fontFamily: "'Amiri', 'Traditional Arabic', serif", direction: "rtl" }}>
-              {ayahs.map((a, i) => (
-                <span key={i}>
-                  {a.text}
-                  <span className="text-emerald-400 mx-1 text-base" style={{ fontFamily: "serif" }}>
-                    {" "}﴿{toArabicNum(a.numberInSurah)}﴾{" "}
-                  </span>
-                </span>
-              ))}
-            </p>
+
+          {pagesLoaded.map((pd, index) => {
+            const isFirstInSurah = pd.ayahs.length > 0 && pd.ayahs[0].numberInSurah === 1;
+            const pbSurah = getSurahForPage(pd.page);
+
+            return (
+              <div key={pd.page} data-page={pd.page} className="quran-page-marker relative">
+                {/* Visual marker for continuous read separating pages */}
+                {index > 0 && (
+                  <div className="flex items-center gap-4 my-8 opacity-30 select-none">
+                    <div className="flex-1 h-px bg-current" />
+                    <span className="text-[10px] font-mono">Page {pd.page}</span>
+                    <div className="flex-1 h-px bg-current" />
+                  </div>
+                )}
+
+                {/* Surah header if page starts a new surah */}
+                {isFirstInSurah && (
+                  <div className="text-center py-5 mb-4 border-b border-white/[0.06]">
+                    <p className="text-2xl font-arabic mb-1">{pbSurah.arabicName}</p>
+                    <p className="text-sm opacity-50">{pbSurah.name} · {pbSurah.type} · {pbSurah.ayahs} Ayahs</p>
+                    {pbSurah.number !== 1 && pbSurah.number !== 9 && (
+                      <p className="text-lg font-arabic mt-3 opacity-70">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Ayahs */}
+                <p className={`font-arabic text-right leading-loose tracking-wide text-${FONT_SIZES[fontSize].split("-")[1]} ${FONT_SIZES[fontSize]
+                  } ${isDark ? "text-white/90" : "text-black/90"}`}
+                  style={{ fontFamily: "'Amiri Quran', 'Noto Naskh Arabic', serif", direction: "rtl", lineHeight: "2.1" }}>
+                  {pd.ayahs.map((a, i) => (
+                    <span key={i}>
+                      {a.text}
+                      <span className="text-emerald-400 mx-1 text-base" style={{ fontFamily: "serif" }}>
+                        {" "}﴿{toArabicNum(a.numberInSurah)}﴾{" "}
+                      </span>
+                    </span>
+                  ))}
+                </p>
+              </div>
+            );
+          })}
+
+          {/* Bottom Loading Indicator */}
+          {loadingNext && pagesLoaded.length > 0 && (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-6 h-6 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
+            </div>
           )}
         </div>
       </div>
@@ -270,7 +323,7 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
         </button>
         <button onClick={markRead}
           className="flex-[2] py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition-colors">
-          ✓ Mark Read & Next
+          ✓ Mark Page {page} Read
         </button>
         <button onClick={() => goTo(page + 1)} disabled={page >= 604}
           className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-30 font-semibold text-sm transition-colors">
@@ -284,9 +337,8 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
           <span className="text-xs opacity-40 flex-shrink-0 self-center">Bookmarks:</span>
           {(profile.quranBookmarks ?? []).map((b) => (
             <button key={b} onClick={() => goTo(b)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex-shrink-0 transition-colors ${
-                b === page ? "bg-amber-500/25 text-amber-300 border border-amber-500/40" : "bg-white/10 hover:bg-white/15"
-              }`}>
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex-shrink-0 transition-colors ${b === page ? "bg-amber-500/25 text-amber-300 border border-amber-500/40" : "bg-white/10 hover:bg-white/15"
+                }`}>
               p.{b}
             </button>
           ))}

@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        arabic: ["Amiri", "Traditional Arabic", "Arial Unicode MS", "serif"],
+        arabic: ['"Noto Naskh Arabic"', "Arial Unicode MS", "serif"],
       },
     },
   },

@@ -377,7 +377,7 @@ export default function App() {
 
   // ── Score ──
   const todayScore = (() => {
-    let score = 0, total = 11;
+    let score = 0, total = 14;
     for (const p of PRAYERS) { if (dayData.prayers[p.id]?.fard) score++; if (dayData.prayers[p.id]?.sunnah) score++; }
     if (dayData.morningAdhkar) score++; if (dayData.eveningAdhkar) score++; if (dayData.sadaqah) score++;
     if (dayData.quranPages >= dayData.quranGoal && dayData.quranGoal > 0) score++;
