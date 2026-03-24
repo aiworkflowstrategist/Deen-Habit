@@ -33,10 +33,24 @@ export const DEFAULT_PROFILE: UserProfile = {
 
 const PROFILE_KEY = "deenhabit_profile";
 export function loadProfile(): UserProfile {
-  try { const r = localStorage.getItem(PROFILE_KEY); if (r) return { ...DEFAULT_PROFILE, ...JSON.parse(r) }; } catch {}
-  return { ...DEFAULT_PROFILE };
+  try {
+    const r = localStorage.getItem(PROFILE_KEY);
+    if (!r) return { ...DEFAULT_PROFILE };
+    const parsed = JSON.parse(r);
+    if (!parsed || typeof parsed !== "object") throw new Error("Invalid profile");
+    return { ...DEFAULT_PROFILE, ...parsed };
+  } catch {
+    localStorage.removeItem(PROFILE_KEY);
+    return { ...DEFAULT_PROFILE };
+  }
 }
-export function saveProfile(p: UserProfile) { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }
+export function saveProfile(p: UserProfile) {
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+  } catch {
+    // storage unavailable
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

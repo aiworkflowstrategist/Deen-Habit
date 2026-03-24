@@ -22,10 +22,12 @@ const FONT_LABELS = ["S", "M", "L"];
 const FONT_KEY = "deenhabit_quran_font";
 
 async function fetchPage(page: number): Promise<AyahData[]> {
-  const res = await fetch(`https://api.alquran.cloud/v1/page/${page}/quran-uthmani`);
-  if (!res.ok) throw new Error("Failed to fetch");
-  const json = await res.json();
-  return json.data?.ayahs ?? [];
+  const res = await fetch(`https://api.alquran.cloud/v1/page/${page}/quran-uthmani`, { cache: "force-cache" });
+  if (!res.ok) throw new Error("Failed to fetch page data");
+  let json;
+  try { json = await res.json(); } catch { throw new Error("Invalid response format"); }
+  if (json.status !== "OK" || !Array.isArray(json.data?.ayahs)) throw new Error("Unexpected Quran API payload");
+  return json.data.ayahs;
 }
 
 export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage, isDark }: QuranTabProps) {
@@ -37,7 +39,11 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
 
   const [view, setView] = useState<"reader" | "surahs" | "jump">("reader");
   const [jumpInput, setJumpInput] = useState("");
-  const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem(FONT_KEY) ?? "1"));
+  const [fontSize, setFontSize] = useState(() => {
+    const stored = localStorage.getItem(FONT_KEY);
+    const parsed = parseInt(stored ?? "1", 10);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed < FONT_SIZES.length ? parsed : 1;
+  });
   const [toast, setToast] = useState<string | null>(null);
   const [surahSearch, setSurahSearch] = useState("");
   const [overlayTab, setOverlayTab] = useState<"surahs" | "page" | "juz" | "hizb">("surahs");

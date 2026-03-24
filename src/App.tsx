@@ -63,11 +63,29 @@ function formatCountdown(secs: number): string {
 }
 
 function loadData(): AppData {
-  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch { }
-  return { days: {}, quranGoal: 1, dhikrTarget: 33 };
+  try {
+    const r = localStorage.getItem(STORAGE_KEY);
+    if (!r) return { days: {}, quranGoal: 1, dhikrTarget: 33 };
+    const parsed = JSON.parse(r);
+    if (!parsed || typeof parsed !== "object") throw new Error("Invalid app data");
+    return {
+      days: typeof parsed.days === "object" && parsed.days ? parsed.days : {},
+      quranGoal: Number(parsed.quranGoal) || 1,
+      dhikrTarget: Number(parsed.dhikrTarget) || 33,
+    };
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+    return { days: {}, quranGoal: 1, dhikrTarget: 33 };
+  }
 }
 
-function saveData(data: AppData) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+function saveData(data: AppData) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // quota full or storage disabled
+  }
+}
 
 function emptyDay(date: string, mode: Mode, quranGoal: number): DayData {
   const prayers: DayData["prayers"] = {};
@@ -84,14 +102,17 @@ function emptyDay(date: string, mode: Mode, quranGoal: number): DayData {
 async function fetchPrayerTimes(lat: number, lng: number, dateStr: string, method: number): Promise<PrayerTimes | null> {
   try {
     const [y, mo, d] = dateStr.split("-");
-    const url = `https://api.aladhan.com/v1/timings/${d}-${mo}-${y}?latitude=${lat}&longitude=${lng}&method=${method}`;
+    if (!y || !mo || !d) return null;
+    const url = `https://api.aladhan.com/v1/timings/${d}-${mo}-${y}?latitude=${encodeURIComponent(String(lat))}&longitude=${encodeURIComponent(String(lng))}&method=${encodeURIComponent(String(method))}`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const json = await res.json();
-    const t = json.data?.timings;
-    if (!t) return null;
-    return { Fajr: t.Fajr, Sunrise: t.Sunrise, Dhuhr: t.Dhuhr, Asr: t.Asr, Maghrib: t.Maghrib, Isha: t.Isha, date: dateStr, location: "" };
-  } catch { return null; }
+    if (!json || json.code !== 200 || !json.data?.timings) return null;
+    const t = json.data.timings;
+    return { Fajr: t.Fajr || "00:00", Sunrise: t.Sunrise || "00:00", Dhuhr: t.Dhuhr || "00:00", Asr: t.Asr || "00:00", Maghrib: t.Maghrib || "00:00", Isha: t.Isha || "00:00", date: dateStr, location: "" };
+  } catch {
+    return null;
+  }
 }
 
 async function geocodeCity(query: string): Promise<LocationInfo | null> {
@@ -161,8 +182,18 @@ export default function App() {
   const isDark = true;
 
   // ── Mode — persisted ──
-  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem(MODE_KEY) as Mode) ?? "annual");
-  useEffect(() => { localStorage.setItem(MODE_KEY, mode); }, [mode]);
+  const [mode, setMode] = useState<Mode>(() => {
+    const stored = localStorage.getItem(MODE_KEY) as Mode | null;
+    if (stored === "ramadan" || stored === "annual") return stored;
+    return "annual";
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+      // localStorage disabled or quota exceeded
+    }
+  }, [mode]);
 
   // ── Tab ──
   const [tab, setTab] = useState<Tab>("today");
