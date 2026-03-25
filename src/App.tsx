@@ -795,6 +795,12 @@ export default function App() {
         )}
       </main>
 
+      {/* Important:
+          The pull-to-refresh wrapper applies `transform`, and any `position: fixed`
+          element inside it becomes anchored to that wrapper instead of the viewport.
+          We keep the bottom nav outside that wrapper so it stays visible while scrolling. */}
+      </div>
+
       {/* ── Bottom Nav ── */}
       <nav className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0a0f0d]/92 backdrop-blur-xl z-10"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
@@ -881,7 +887,6 @@ export default function App() {
           </div>
         </div>
       )}
-    </div>
     </div>
   );
 }
