@@ -236,14 +236,26 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // [B1] Fix: stale appData closure — read fresh data from localStorage after merge,
+  //           then push that merged copy instead of the potentially-stale state value.
   useEffect(() => {
     if (!user) return;
     (async () => {
       setSyncStatus("syncing");
       const [remote, remoteProfile] = await Promise.all([pullFromCloud(user.id), pullProfile(user.id)]);
-      if (remote) { const merged = mergeAppData(loadData(), remote); setAppData(merged); saveData(merged); }
-      if (remoteProfile) { const p = { ...DEFAULT_PROFILE, ...remoteProfile }; setProfile(p); saveProfile(p); }
-      const pushed = await pushToCloud(appData, user.id);
+      let dataToSync = loadData();   // fresh read
+      if (remote) {
+        const merged = mergeAppData(dataToSync, remote);
+        setAppData(merged);
+        saveData(merged);
+        dataToSync = merged;          // push the merged copy, not stale state
+      }
+      if (remoteProfile) {
+        const p = { ...DEFAULT_PROFILE, ...remoteProfile };
+        setProfile(p);
+        saveProfile(p);
+      }
+      const pushed = await pushToCloud(dataToSync, user.id);
       setSyncStatus(pushed ? "synced" : "error");
     })();
   }, [user]);
@@ -307,15 +319,33 @@ export default function App() {
     } else { setPtError("Could not load prayer times."); }
   }, [today, profile.calcMethod]);
 
+  // [B2] Fix: include loadPrayerTimes in deps so calcMethod changes trigger a re-fetch.
+  //           Also invalidate cache when calcMethod changes so cached stale data isn't used.
   useEffect(() => {
     if (mode === "ramadan") {
       try {
         const raw = localStorage.getItem(PT_CACHE_KEY);
-        if (raw) { const { pt } = JSON.parse(raw); if (pt.date === today) return; }
+        if (raw) {
+          const { pt } = JSON.parse(raw);
+          // Only use cache if same date AND same calcMethod
+          if (pt.date === today && pt.calcMethod === profile.calcMethod) return;
+        }
       } catch { }
       loadPrayerTimes(location);
     }
-  }, [mode, location, today]);
+  }, [mode, location, today, loadPrayerTimes, profile.calcMethod]);
+
+  // [P2] When calcMethod changes, stamp cache with calcMethod so stale data is
+  //      detected above. We do this by clearing and re-writing on method change.
+  const prevCalcMethodRef = useRef(profile.calcMethod);
+  useEffect(() => {
+    if (prevCalcMethodRef.current !== profile.calcMethod) {
+      prevCalcMethodRef.current = profile.calcMethod;
+      // Invalidate PT cache on calcMethod change
+      try { localStorage.removeItem(PT_CACHE_KEY); } catch { }
+      setPrayerTimes(null);
+    }
+  }, [profile.calcMethod]);
 
   useEffect(() => {
     if (!prayerTimes || mode !== "ramadan") {
@@ -394,14 +424,19 @@ export default function App() {
         if (error) throw error;
         setShowAuthModal(false);
       }
-    } catch (err: any) { setAuthError(err.message || "Something went wrong."); }
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : "Something went wrong.");
+    }
     finally { setAuthLoading(false); }
   };
 
   const handleGoogleSignIn = async () => {
     setAuthLoading(true); setAuthError(null);
     try { const { error } = await signInWithGoogle(); if (error) throw error; }
-    catch (err: any) { setAuthError(err.message || "Google sign-in failed."); setAuthLoading(false); }
+    catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : "Google sign-in failed.");
+      setAuthLoading(false);
+    }
   };
 
   const handleSignOut = async () => { await signOut(); setShowUserMenu(false); setSyncStatus("idle"); };
@@ -431,15 +466,12 @@ export default function App() {
     if (pullDistance >= pullThreshold && !isRefreshing) {
       setIsRefreshing(true);
       try {
-        // Check for service worker updates
         if (swRegRef.current) {
           await swRegRef.current.update();
         }
-        // Force refresh prayer times if needed
         if (mode === "ramadan" && location) {
           loadPrayerTimes(location);
         }
-        // Small delay for visual feedback
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         console.warn("Pull refresh failed:", error);
@@ -732,6 +764,7 @@ export default function App() {
 
         {/* ── QURAN TAB ── */}
         {tab === "quran" && (
+          // [T2] Fix: pass dayData (DayData) not todayPages (number)
           <QuranTab
             profile={profile}
             onProfileChange={handleProfileChange}

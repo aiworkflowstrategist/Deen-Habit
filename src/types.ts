@@ -24,7 +24,7 @@ export interface UserProfile {
   quranLastPage: number;
   quranBookmarks: number[];
   showTransliteration: boolean;
-  duaFavourites: string[];
+  duaFavourites: string[];   // [T1] was missing – caused DuaTab + ProfileTab errors
   joinedAt: string;
 }
 

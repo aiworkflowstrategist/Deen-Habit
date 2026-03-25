@@ -21,6 +21,11 @@ const FONT_SIZES = ["text-lg", "text-xl", "text-2xl"];
 const FONT_LABELS = ["S", "M", "L"];
 const FONT_KEY = "deenhabit_quran_font";
 
+// [B3] Cap the number of simultaneously-loaded pages to prevent memory growth
+//      during long infinite-scroll sessions. When we append a new page and
+//      exceed the cap we drop pages from the opposite end.
+const MAX_PAGES_IN_VIEW = 15;
+
 async function fetchPage(page: number): Promise<AyahData[]> {
   const res = await fetch(`https://api.alquran.cloud/v1/page/${page}/quran-uthmani`, { cache: "force-cache" });
   if (!res.ok) throw new Error("Failed to fetch page data");
@@ -31,6 +36,10 @@ async function fetchPage(page: number): Promise<AyahData[]> {
 }
 
 export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage, isDark }: QuranTabProps) {
+  // [T2] dayData replaces the old todayPages prop
+  const todayPages = dayData.quranPages;
+  const goal = profile.quranGoal;
+
   const [page, setPage] = useState(profile.quranLastPage || 1);
   const [pagesLoaded, setPagesLoaded] = useState<{ page: number; ayahs: AyahData[] }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,8 +60,9 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
 
   const surah = getSurahForPage(page);
   const juz = getJuzForPage(page);
-  const todayPages = dayData.quranPages;
-  const goal = profile.quranGoal;
+
+  // [P3] Capture initial page as a ref so it's stable and we don't re-run on every profile change
+  const initialPageRef = useRef(profile.quranLastPage || 1);
 
   const load = useCallback(async (p: number, append = false) => {
     if (append) setLoadingNext(true); else setLoading(true);
@@ -62,12 +72,21 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
       if (append) {
         setPagesLoaded((prev) => {
           if (prev.some(pd => pd.page === p)) return prev;
-          return [...prev, { page: p, ayahs: data }];
+          // [B3] Cap pages to avoid unbounded memory growth
+          const updated = [...prev, { page: p, ayahs: data }];
+          if (updated.length > MAX_PAGES_IN_VIEW) {
+            // Drop from the front (oldest pages scrolled past)
+            return updated.slice(updated.length - MAX_PAGES_IN_VIEW);
+          }
+          return updated;
         });
       } else {
         setPagesLoaded([{ page: p, ayahs: data }]);
         setPage(p);
-        if (contentRef.current) contentRef.current.scrollTop = 0;
+        // [B4] Scroll to top AFTER state update is painted, not before data arrives
+        requestAnimationFrame(() => {
+          if (contentRef.current) contentRef.current.scrollTop = 0;
+        });
       }
     } catch {
       setError("Could not load page. Check your connection.");
@@ -76,11 +95,10 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
     }
   }, []);
 
-  // Initial setup: Load starting page
+  // [P3] Use stable ref value so this only runs once on mount
   useEffect(() => {
-    load(profile.quranLastPage || 1, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    load(initialPageRef.current, false);
+  }, [load]);
 
   // Debounce profile updates to avoid constant re-renders when scrolling
   useEffect(() => {
@@ -122,7 +140,7 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
 
   function goTo(p: number) {
     const clamped = Math.max(1, Math.min(604, p));
-    load(clamped, false); // Reload completely from new page
+    load(clamped, false);
     setView("reader");
   }
 
@@ -176,13 +194,13 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
   const hizbList = Array.from({ length: 60 }, (_, i) => {
     const juzIndex = Math.floor(i / 2);
     const isFirstHalf = i % 2 === 0;
-    const page = isFirstHalf
+    const pg = isFirstHalf
       ? JUZ_PAGES[juzIndex]
       : juzIndex < JUZ_PAGES.length - 1
         ? Math.floor((JUZ_PAGES[juzIndex] + JUZ_PAGES[juzIndex + 1]) / 2)
         : JUZ_PAGES[JUZ_PAGES.length - 1];
-    const surahInfo = getSurahForPage(page);
-    return { number: i + 1, startPage: page, surahInfo };
+    const surahInfo = getSurahForPage(pg);
+    return { number: i + 1, startPage: pg, surahInfo };
   });
 
   return (
@@ -360,7 +378,7 @@ export default function QuranTab({ profile, onProfileChange, dayData, onMarkPage
             <div className="text-center py-12 space-y-3">
               <p className="text-2xl">📡</p>
               <p className="text-sm opacity-60">{error}</p>
-              <button onClick={() => load(profile.quranLastPage || 1, false)} className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 text-sm">Retry</button>
+              <button onClick={() => load(initialPageRef.current, false)} className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 text-sm">Retry</button>
             </div>
           )}
 

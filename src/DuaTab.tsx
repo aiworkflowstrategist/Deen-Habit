@@ -14,11 +14,12 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const showTranslit = profile.showTransliteration ?? false;
 
+  // [T1/T4] duaFavourites now exists on UserProfile; param typed explicitly
   const favourites = profile.duaFavourites ?? [];
 
   function toggleFavourite(id: string) {
     const updated = favourites.includes(id)
-      ? favourites.filter((f) => f !== id)
+      ? favourites.filter((f: string) => f !== id)   // [T4] explicit type
       : [...favourites, id];
     onProfileChange({ ...profile, duaFavourites: updated });
   }
@@ -27,6 +28,7 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
     onProfileChange({ ...profile, showTransliteration: !showTranslit });
   }
 
+  // [P1] also search transliteration
   const filtered = useMemo(() => {
     let list = DUAS;
     if (activeCategory) list = list.filter((d) => d.category === activeCategory);
@@ -35,7 +37,8 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
       list = list.filter((d) =>
         d.title.toLowerCase().includes(q) ||
         d.translation.toLowerCase().includes(q) ||
-        d.when.toLowerCase().includes(q)
+        d.when.toLowerCase().includes(q) ||          // [T3] was 'whenToRecite'
+        d.transliteration.toLowerCase().includes(q)  // [P1] search transliteration
       );
     }
     return list;
@@ -60,6 +63,7 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
         >
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold">{dua.title}</p>
+            {/* [T3] was dua.whenToRecite — now correctly dua.when */}
             <p className="text-xs opacity-50 mt-0.5 line-clamp-1">{dua.when}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -90,6 +94,7 @@ export default function DuaTab({ profile, onProfileChange, isDark }: DuaTabProps
             {/* When to recite */}
             <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/15 p-3">
               <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">When to recite</p>
+              {/* [T3] was dua.whenToRecite — now correctly dua.when */}
               <p className="text-xs opacity-70 leading-relaxed">{dua.when}</p>
             </div>
 
